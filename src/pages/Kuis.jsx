@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
+import KuisContainer from "../components/fragments/kuisContainer";
 
 export default function Kuis() {
   const [results, setResults] = useState([]);
@@ -13,8 +14,7 @@ export default function Kuis() {
   const timerId = useRef();
   const navigate = useNavigate();
 
-  useEffect(() => {
-    // Fetching data dari API
+  const fetchQuiz = async () => {
     axios
       .get("https://opentdb.com/api.php?amount=10&type=boolean")
       .then((res) => {
@@ -24,13 +24,59 @@ export default function Kuis() {
       })
       .catch((err) => {
         console.error(err);
+        setError("Gagal memuat kuis, coba lagi nanti.");
       });
+  };
+
+  useEffect(() => {
+    const username = localStorage.getItem("name");
+    const handleBeforeUnload = () => {
+      const quizState = {
+        results,
+        currentQuestionIndex,
+        benar,
+        salah,
+        terjawab,
+        countdown,
+        soal,
+        username,
+      };
+      localStorage.setItem("quizState", JSON.stringify(quizState));
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, [results, currentQuestionIndex, benar, salah, terjawab, countdown, soal]);
+
+  useEffect(() => {
+    const quizState = JSON.parse(localStorage.getItem("quizState"));
+    if (quizState && quizState.username === localStorage.getItem("name")) {
+      const userChoice = window.confirm(
+        "Kamu memiliki kuis yang belum selesai. Apakah kamu ingin melanjutkan?"
+      );
+      if (userChoice) {
+        setResults(quizState.results);
+        setCurrentQuestionIndex(quizState.currentQuestionIndex);
+        setBenar(quizState.benar);
+        setSalah(quizState.salah);
+        setTerjawab(quizState.terjawab);
+        setCountdown(quizState.countdown);
+        setSoal(quizState.soal);
+      } else {
+        localStorage.removeItem("quizState");
+        fetchQuiz();
+      }
+    } else {
+      fetchQuiz();
+    }
   }, []);
 
   useEffect(() => {
     // Memulai timer
     if (currentQuestionIndex < results.length) {
-      const timer = setTimeout(() => {
+      timerId.current = setTimeout(() => {
         setCurrentQuestionIndex((prev) => prev + 1);
         setCountdown(20);
         setTerjawab((prev) => prev + 1);
@@ -41,14 +87,14 @@ export default function Kuis() {
         navigate("/result", { state: { benar, salah, terjawab } });
       }
 
-      return () => clearTimeout(timer); // Membersihkan timer saat komponen di-unmount
+      return () => clearTimeout(timerId.current);
     }
   }, [currentQuestionIndex, results.length]);
 
   useEffect(() => {
     if (currentQuestionIndex < results.length) {
       timerId.current = setInterval(() => {
-        setCountdown((prev) => prev - 1);
+        setCountdown((prev) => (prev > 0 ? prev - 1 : 0));
       }, 1000);
       return () => clearInterval(timerId.current);
     }
@@ -72,7 +118,7 @@ export default function Kuis() {
       setSalah((prev) => prev + 1);
       setTerjawab((prev) => prev + 1);
     }
-    // Pindah ke pertanyaan berikutnya
+
     if (currentQuestionIndex < results.length - 1) {
       setCountdown(20);
       setCurrentQuestionIndex((prev) => prev + 1);
@@ -87,7 +133,7 @@ export default function Kuis() {
       setSalah((prev) => prev + 1);
       setTerjawab((prev) => prev + 1);
     }
-    // Pindah ke pertanyaan berikutnya
+
     if (currentQuestionIndex < results.length - 1) {
       setCountdown(20);
       setCurrentQuestionIndex((prev) => prev + 1);
@@ -97,37 +143,16 @@ export default function Kuis() {
   return (
     <main className="min-h-screen bg-purple-900 text-white p-[3%] flex flex-col justify-between">
       {results.length > 0 && (
-        <>
-          <div className="w-full h-[400px] flex relative justify-center items-center bg-purple-700 bg-opacity-45 border border-white rounded-lg backdrop-brightness-65 p-8">
-            <div className="absolute right-5 top-5 text-xl font-bold bg-purple-700 bg-opacity-45 border border-white rounded-lg backdrop-brightness-65 p-5">
-              <span>
-                Soal ke {terjawab + 1} / {soal}
-              </span>
-            </div>
-            <div className="absolute text-4xl font-semibold w-[80px] translate-x-0 top-[-40px] bg-purple-700 border border-white rounded-lg backdrop-brightness-65 p-4">
-              <span className="flex justify-center">{countdown}</span>
-            </div>
-            <h1 className="text-3xl font-bold text-center">
-              {cleanString(
-                results[currentQuestionIndex]?.question || "Loading..."
-              )}
-            </h1>
-          </div>
-          <div className="flex w-full h-[370px] justify-between">
-            <button
-              className="w-[49%] flex justify-center items-center bg-green-600 rounded-lg text-6xl font-bold"
-              onClick={answerTrue}
-            >
-              True
-            </button>
-            <button
-              className="w-[49%] flex justify-center items-center bg-red-600 rounded-lg text-6xl font-bold"
-              onClick={answerFalse}
-            >
-              False
-            </button>
-          </div>
-        </>
+        <KuisContainer
+          answerTrue={answerTrue}
+          answerFalse={answerFalse}
+          currentQuiz={cleanString(
+            results[currentQuestionIndex]?.question || "Loading..."
+          )}
+          countdown={countdown}
+          terjawab={terjawab}
+          soal={soal}
+        />
       )}
     </main>
   );
